@@ -8,14 +8,18 @@ import {
   AggregatedProduct,
 } from "@/lib/bitrix";
 import * as XLSX from "xlsx";
+import { signOut } from "next-auth/react";
+
+const BITRIX_USER_ID = process.env.NEXT_PUBLIC_BITRIX_USER_ID || "";
+const BITRIX_HOOK_SECRET = process.env.NEXT_PUBLIC_BITRIX_HOOK_SECRET || "";
 
 export default function BitrixDashboard() {
-  const [userId, setUserId] = useState("");
-  const [hook, setHook] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedDay, setSelectedDay] = useState<number | "All">("All");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AggregatedProduct[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [totalInvoices, setTotalInvoices] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
@@ -44,40 +48,41 @@ export default function BitrixDashboard() {
   );
 
   React.useEffect(() => {
-    if (userId && hook) {
-      fetchHospitalLocations(userId, hook).then((data) => {
+    if (BITRIX_USER_ID && BITRIX_HOOK_SECRET) {
+      fetchHospitalLocations(BITRIX_USER_ID, BITRIX_HOOK_SECRET).then((data) => {
         setHospitalLocations(data);
       });
     } else {
       setHospitalLocations([]);
       setSelectedLocation("All");
     }
-  }, [userId, hook]);
+  }, []);
 
   // Auto-fetch total count and clear old data when month/year changes
   React.useEffect(() => {
-    if (userId && hook) {
+    if (BITRIX_USER_ID && BITRIX_HOOK_SECRET) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setData([]);
       setTotalInvoices(0);
       fetchTotalCount(
-        userId,
-        hook,
+        BITRIX_USER_ID,
+        BITRIX_HOOK_SECRET,
         selectedMonth,
         selectedYear,
         selectedLocation,
-        "ufCrm_634952003E51B"
+        "ufCrm_634952003E51B",
+        selectedDay
       ).then((count) => setTotalCount(count));
     } else {
       setData([]);
       setTotalInvoices(0);
       setTotalCount(0);
     }
-  }, [userId, hook, selectedMonth, selectedYear, selectedLocation]);
+  }, [selectedMonth, selectedYear, selectedLocation, selectedDay]);
 
   const handleFetch = async () => {
-    if (!userId || !hook) {
-      setError("Please enter both User ID and Hook");
+    if (!BITRIX_USER_ID || !BITRIX_HOOK_SECRET) {
+      setError("Credentials not found in environment variables");
       return;
     }
 
@@ -96,14 +101,15 @@ export default function BitrixDashboard() {
       while (currentStart !== null && accumulatedTotal < syncLimit) {
         const currentLimit = Math.min(500, syncLimit - accumulatedTotal);
         const result = await fetchBitrixData(
-          userId,
-          hook,
+          BITRIX_USER_ID,
+          BITRIX_HOOK_SECRET,
           selectedMonth,
           selectedYear,
           selectedLocation,
           currentStart,
           currentLimit,
           "ufCrm_634952003E51B",
+          selectedDay
         );
 
         // Merge products
@@ -139,7 +145,9 @@ export default function BitrixDashboard() {
     }
   };
 
-  const filteredData = data;
+  const filteredData = data.filter((item) =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
   const exportToExcel = () => {
     if (data.length === 0) return;
@@ -147,9 +155,11 @@ export default function BitrixDashboard() {
     const worksheet = XLSX.utils.json_to_sheet(
       data.map((item) => ({
         "Product Name": item.name,
+        Location: item.locationId,
         Deals: item.deals,
         "Quantity Sold": item.quantitySold,
         "Revenue (INR)": item.revenue,
+        "Last Transaction": item.lastDate,
       })),
     );
 
@@ -166,39 +176,40 @@ export default function BitrixDashboard() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#1E293B] mb-2">
-            Inventory Management
-          </h1>
-          <p className="text-[#64748B]">
-            Bitrix24 Smart Invoices Product Analysis
-          </p>
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <h1 className="text-3xl font-bold text-[#1E293B] mb-2">
+                Inventory Management
+              </h1>
+              <p className="text-[#64748B]">
+                Bitrix24 Smart Invoices Product Analysis
+              </p>
+            </div>
+            <button
+              onClick={() => signOut()}
+              className="px-4 py-2 bg-white border border-[#E2E8F0] text-[#64748B] hover:text-[#EF4444] hover:border-[#EF4444] rounded-xl text-sm font-semibold transition-all shadow-xs active:scale-[0.98] flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Logout
+            </button>
+          </div>
         </div>
 
         {/* Config Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-[#E2E8F0] p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-end">
-            <div>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 items-end">
+            <div className="lg:col-span-1">
               <label className="block text-sm font-medium text-[#475569] mb-2">
-                User ID
+                Search Product
               </label>
               <input
                 type="text"
-                placeholder="e.g. 1"
+                placeholder="Filter by name..."
                 className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#475569] mb-2">
-                Webhook Secret (Hook)
-              </label>
-              <input
-                type="password"
-                placeholder="e.g. abcdefgh12345678"
-                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
-                value={hook}
-                onChange={(e) => setHook(e.target.value)}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <div>
@@ -213,6 +224,23 @@ export default function BitrixDashboard() {
                 {months.map((m, i) => (
                   <option key={m} value={i}>
                     {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#475569] mb-2">
+                Day
+              </label>
+              <select
+                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
+                value={selectedDay}
+                onChange={(e) => setSelectedDay(e.target.value === "All" ? "All" : parseInt(e.target.value))}
+              >
+                <option value="All">All Days</option>
+                {Array.from({ length: new Date(selectedYear, selectedMonth + 1, 0).getDate() }, (_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    {i + 1}
                   </option>
                 ))}
               </select>
@@ -244,8 +272,8 @@ export default function BitrixDashboard() {
               >
                 <option value="All">All Locations</option>
                 {hospitalLocations.map((loc: any) => (
-                  <option key={loc.ID} value={loc.ID}>
-                    {loc.NAME}
+                  <option key={loc.ID} value={loc.ID} title={loc.NAME}>
+                    {loc.NAME.length > 40 ? loc.NAME.substring(0, 40) + "..." : loc.NAME}
                   </option>
                 ))}
               </select>
@@ -430,7 +458,7 @@ export default function BitrixDashboard() {
               <thead>
                 <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">
-                    Product
+                    Product & Location
                   </th>
                   <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-center">
                     Deals
@@ -453,6 +481,13 @@ export default function BitrixDashboard() {
                         <td className="px-6 py-4">
                           <div className="font-semibold text-[#1E293B] group-hover:text-[#3B82F6] transition-colors">
                             {item.name}
+                          </div>
+                          <div className="text-[10px] text-[#64748B] font-medium flex items-center gap-1 mt-0.5">
+                            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {item.locationId}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
@@ -482,9 +517,9 @@ export default function BitrixDashboard() {
                           colSpan={5}
                           className="px-6 py-12 text-center text-[#94A3B8]"
                         >
-                          {userId
+                          {BITRIX_USER_ID
                             ? "No data found for this period"
-                            : "Enter credentials to load inventory data"}
+                            : "Configure BITRIX credentials in .env.local to load inventory data"}
                         </td>
                       </tr>
                     )}

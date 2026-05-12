@@ -19,6 +19,7 @@ export interface AggregatedProduct {
   deals: number;
   quantitySold: number;
   revenue: number;
+  lastDate: string;
 }
 
 export interface BitrixLocation {
@@ -141,11 +142,14 @@ export async function fetchBitrixData(
   start: number = 0,
   limit: number = 50,
   manualFieldId?: string,
+  day?: number | "All",
 ) {
   const baseUrl = `https://crm.mantracare.com/rest/${userId}/${hook}`;
-  const formatDate = (date: Date) => date.toISOString().split("T")[0];
-  const startDate = formatDate(new Date(year, month, 1));
-  const endDate = formatDate(new Date(year, month + 1, 0));
+  const startDay = day && day !== "All" ? day : 1;
+  const endDay = day && day !== "All" ? day : new Date(year, month + 1, 0).getDate();
+  
+  const startDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
+  const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
 
   try {
     const fieldsRes = await fetch(
@@ -322,11 +326,24 @@ export async function fetchBitrixData(
                   locationId: locationName,
                   deals: 0,
                   quantitySold: 0,
-                  revenue: 0,
+                   revenue: 0,
+                  lastDate: "",
                 };
               }
               productAggregation[aggKey].quantitySold += Number(row.quantity);
               productAggregation[aggKey].revenue += Number(row.priceBrutto);
+
+              const invDate = invoice?.begindate
+                ? new Date(invoice.begindate).toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                  })
+                : "";
+
+              if (invDate) {
+                productAggregation[aggKey].lastDate = invDate;
+              }
+
               seenInThisInv.add(aggKey);
             });
             seenInThisInv.forEach((k) => (productAggregation[k].deals += 1));
@@ -356,11 +373,14 @@ export async function fetchTotalCount(
   year: number,
   filterLocationId?: string,
   manualFieldId?: string,
+  day?: number | "All",
 ) {
   const baseUrl = `https://crm.mantracare.com/rest/${userId}/${hook}`;
-  const formatDate = (date: Date) => date.toISOString().split("T")[0];
-  const startDate = formatDate(new Date(year, month, 1));
-  const endDate = formatDate(new Date(year, month + 1, 0));
+  const startDay = day && day !== "All" ? day : 1;
+  const endDay = day && day !== "All" ? day : new Date(year, month + 1, 0).getDate();
+
+  const startDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
+  const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
 
   const filter: any = {
     ">=begindate": startDate,
