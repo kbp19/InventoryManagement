@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import {
   fetchBitrixData,
   fetchTotalCount,
+  fetchHospitalLocations,
   AggregatedProduct,
 } from "@/lib/bitrix";
 import * as XLSX from "xlsx";
@@ -18,8 +19,9 @@ export default function BitrixDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [totalInvoices, setTotalInvoices] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  const [nextStart, setNextStart] = useState<number | null>(null);
   const [syncLimit, setSyncLimit] = useState(500);
+  const [hospitalLocations, setHospitalLocations] = useState<any[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState("All");
 
   const months = [
     "January",
@@ -41,21 +43,37 @@ export default function BitrixDashboard() {
     (_, i) => new Date().getFullYear() - i,
   );
 
+  React.useEffect(() => {
+    if (userId && hook) {
+      fetchHospitalLocations(userId, hook).then((data) => {
+        setHospitalLocations(data);
+      });
+    } else {
+      setHospitalLocations([]);
+      setSelectedLocation("All");
+    }
+  }, [userId, hook]);
+
   // Auto-fetch total count and clear old data when month/year changes
   React.useEffect(() => {
     if (userId && hook) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setData([]);
       setTotalInvoices(0);
-      setNextStart(0);
-      fetchTotalCount(userId, hook, selectedMonth, selectedYear).then((count) =>
-        setTotalCount(count),
-      );
+      fetchTotalCount(
+        userId,
+        hook,
+        selectedMonth,
+        selectedYear,
+        selectedLocation,
+        "ufCrm_634952003E51B"
+      ).then((count) => setTotalCount(count));
     } else {
       setData([]);
       setTotalInvoices(0);
       setTotalCount(0);
     }
-  }, [userId, hook, selectedMonth, selectedYear]);
+  }, [userId, hook, selectedMonth, selectedYear, selectedLocation]);
 
   const handleFetch = async () => {
     if (!userId || !hook) {
@@ -67,13 +85,12 @@ export default function BitrixDashboard() {
     setError(null);
     setData([]);
     setTotalInvoices(0);
-    setNextStart(null);
     // Note: totalCount is preserved to keep the progress bar context
 
     try {
       let currentStart: number | null = 0;
       let accumulatedTotal = 0;
-      let mergedData: AggregatedProduct[] = [];
+      const mergedData: AggregatedProduct[] = [];
 
       // Use chunks of 500 for a balance between speed and UI progress feedback
       while (currentStart !== null && accumulatedTotal < syncLimit) {
@@ -83,9 +100,10 @@ export default function BitrixDashboard() {
           hook,
           selectedMonth,
           selectedYear,
-          "All",
+          selectedLocation,
           currentStart,
           currentLimit,
+          "ufCrm_634952003E51B",
         );
 
         // Merge products
@@ -107,7 +125,6 @@ export default function BitrixDashboard() {
         setData([...mergedData].sort((a, b) => b.revenue - a.revenue));
         setTotalInvoices(accumulatedTotal);
         setTotalCount(result.totalCount);
-        setNextStart(currentStart);
 
         if (result.totalInvoices === 0) break;
       }
@@ -159,7 +176,7 @@ export default function BitrixDashboard() {
 
         {/* Config Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-[#E2E8F0] p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-end">
             <div>
               <label className="block text-sm font-medium text-[#475569] mb-2">
                 User ID
@@ -217,7 +234,24 @@ export default function BitrixDashboard() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#475569] mb-2 flex justify-between items-center">
+              <label className="block text-sm font-medium text-[#475569] mb-2">
+                Location
+              </label>
+              <select
+                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
+              >
+                <option value="All">All Locations</option>
+                {hospitalLocations.map((loc: any) => (
+                  <option key={loc.ID} value={loc.ID}>
+                    {loc.NAME}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-[#475569] mb-2 flex justify-between items-center">
                 <span>Sync Limit</span>
                 {totalCount > 0 && (
                   <span className="text-[10px] font-bold bg-[#E0F2FE] text-[#0369A1] px-2 py-0.5 rounded-md">
@@ -248,6 +282,64 @@ export default function BitrixDashboard() {
               </button>
             </div>
           </div>
+
+          {loading && (
+            <div className="mt-6 transition-all duration-500 ease-in-out">
+              <div className="flex justify-between text-sm mb-2 text-[#475569] font-medium">
+                <span className="flex items-center gap-2">
+                  <svg
+                    className="animate-spin h-4 w-4 text-[#3B82F6]"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Syncing Invoices...
+                </span>
+                <span className="text-[#3B82F6] font-bold">
+                  {Math.round(
+                    (totalInvoices /
+                      Math.max(
+                        1,
+                        Math.min(syncLimit, totalCount || syncLimit),
+                      )) *
+                      100,
+                  )}
+                  %
+                </span>
+              </div>
+              <div className="w-full bg-[#E2E8F0] rounded-full h-2 overflow-hidden shadow-inner">
+                <div
+                  className="bg-linear-to-r from-[#3B82F6] to-[#60A5FA] h-2 rounded-full transition-all duration-300 ease-out relative"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, (totalInvoices / Math.max(1, Math.min(syncLimit, totalCount || syncLimit))) * 100))}%`,
+                  }}
+                >
+                  <div className="absolute top-0 right-0 bottom-0 left-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[progressBar_1s_linear_infinite]"></div>
+                </div>
+              </div>
+              <style>{`
+                @keyframes progressBar {
+                  0% { background-position: 1rem 0; }
+                  100% { background-position: 0 0; }
+                }
+              `}</style>
+            </div>
+          )}
+
           {error && (
             <p className="mt-4 text-sm text-[#EF4444] font-medium">{error}</p>
           )}

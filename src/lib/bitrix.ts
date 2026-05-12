@@ -113,6 +113,25 @@ export async function fetchLocations(userId: string, hook: string) {
   }
 }
 
+export async function fetchHospitalLocations(userId: string, hook: string) {
+  const baseUrl = `https://crm.mantracare.com/rest/${userId}/${hook}`;
+  try {
+    const res = await fetch(`${baseUrl}/lists.element.get.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        IBLOCK_TYPE_ID: "lists",
+        IBLOCK_ID: 66,
+      }),
+    });
+    const data = await res.json();
+    return data.result || [];
+  } catch (error) {
+    console.error("Error fetching hospital locations:", error);
+    return [];
+  }
+}
+
 export async function fetchBitrixData(
   userId: string,
   hook: string,
@@ -146,6 +165,13 @@ export async function fetchBitrixData(
         const items = allFields[actualLocationField].items || [];
         items.forEach((item: any) => {
           locationMap[item.ID] = item.VALUE;
+        });
+      }
+
+      if (actualLocationField === "ufCrm_634952003E51B") {
+        const hospitalLocs = await fetchHospitalLocations(userId, hook);
+        hospitalLocs.forEach((loc: any) => {
+          locationMap[loc.ID] = loc.NAME;
         });
       }
     }
@@ -328,11 +354,23 @@ export async function fetchTotalCount(
   hook: string,
   month: number,
   year: number,
+  filterLocationId?: string,
+  manualFieldId?: string,
 ) {
   const baseUrl = `https://crm.mantracare.com/rest/${userId}/${hook}`;
   const formatDate = (date: Date) => date.toISOString().split("T")[0];
   const startDate = formatDate(new Date(year, month, 1));
   const endDate = formatDate(new Date(year, month + 1, 0));
+
+  const filter: any = {
+    ">=begindate": startDate,
+    "<=begindate": endDate,
+  };
+
+  if (filterLocationId && filterLocationId !== "All") {
+    const field = manualFieldId || "locationId";
+    filter[field] = filterLocationId;
+  }
 
   try {
     const res = await fetch(`${baseUrl}/crm.item.list`, {
@@ -341,10 +379,7 @@ export async function fetchTotalCount(
       body: JSON.stringify({
         entityTypeId: 31,
         select: ["id"],
-        filter: {
-          ">=begindate": startDate,
-          "<=begindate": endDate,
-        },
+        filter,
         limit: 1,
       }),
     });
