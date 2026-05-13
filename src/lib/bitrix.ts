@@ -18,7 +18,7 @@ export interface AggregatedProduct {
   locationId: string;
   deals: number;
   quantitySold: number;
-  revenue: number;
+  netRevenue: number;
   netPrice: number;
   lastDate: string;
 }
@@ -341,18 +341,18 @@ export async function fetchBitrixData(
                   locationId: locationName,
                   deals: 0,
                   quantitySold: 0,
-                    revenue: 0,
-                    netPrice: 0,
-                    lastDate: "",
-                  };
-                }
-                productAggregation[aggKey].quantitySold += Number(row.quantity);
-                productAggregation[aggKey].revenue += Number(row.priceBrutto);
-                
-                // Update average net price
-                if (productAggregation[aggKey].quantitySold > 0) {
-                  productAggregation[aggKey].netPrice = productAggregation[aggKey].revenue / productAggregation[aggKey].quantitySold;
-                }
+                  netRevenue: 0,
+                  netPrice: 0,
+                  lastDate: "",
+                };
+              }
+              productAggregation[aggKey].quantitySold += Number(row.quantity);
+              productAggregation[aggKey].netRevenue += Number(row.price) * Number(row.quantity);
+              
+              // Update average net price
+              if (productAggregation[aggKey].quantitySold > 0) {
+                productAggregation[aggKey].netPrice = productAggregation[aggKey].netRevenue / productAggregation[aggKey].quantitySold;
+              }
 
               const invDate = invoice?.begindate
                 ? new Date(invoice.begindate).toLocaleDateString("en-IN", {
@@ -375,7 +375,7 @@ export async function fetchBitrixData(
 
     return {
       products: Object.values(productAggregation).sort(
-        (a, b) => b.revenue - a.revenue,
+        (a, b) => b.netRevenue - a.netRevenue,
       ),
       totalInvoices: allInvoices.length,
       totalCount: totalCount,

@@ -133,7 +133,7 @@ export default function BitrixDashboard() {
           if (existing) {
             existing.deals += newProd.deals;
             existing.quantitySold += newProd.quantitySold;
-            existing.revenue += newProd.revenue;
+            existing.netRevenue += newProd.netRevenue;
           } else {
             mergedData.push(newProd);
           }
@@ -143,7 +143,7 @@ export default function BitrixDashboard() {
         currentStart = result.nextStart;
 
         // Update UI state progressively
-        setData([...mergedData].sort((a, b) => b.revenue - a.revenue));
+        setData([...mergedData].sort((a, b) => b.netRevenue - a.netRevenue));
         setTotalInvoices(accumulatedTotal);
         setTotalCount(result.totalCount);
 
@@ -174,7 +174,7 @@ export default function BitrixDashboard() {
         Deals: item.deals,
         "Quantity Sold": item.quantitySold,
         "Net Price": item.netPrice,
-        "Revenue (INR)": item.revenue,
+        "Net Revenue (INR)": item.netRevenue,
         "Last Transaction": item.lastDate,
       })),
     );
@@ -446,7 +446,7 @@ export default function BitrixDashboard() {
             </div>
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#E2E8F0]">
               <p className="text-sm font-medium text-[#64748B] mb-1">
-                Total Revenue
+                Net Revenue
               </p>
               <h3 className="text-2xl font-bold text-[#10B981]">
                 {new Intl.NumberFormat("en-IN", {
@@ -454,7 +454,7 @@ export default function BitrixDashboard() {
                   currency: "INR",
                   maximumFractionDigits: 0,
                 }).format(
-                  filteredData.reduce((acc, curr) => acc + curr.revenue, 0),
+                  filteredData.reduce((acc, curr) => acc + curr.netRevenue, 0),
                 )}
               </h3>
             </div>
@@ -520,7 +520,7 @@ export default function BitrixDashboard() {
                     Net Price
                   </th>
                   <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-right">
-                    Revenue
+                    Net Revenue
                   </th>
                 </tr>
               </thead>
@@ -568,7 +568,7 @@ export default function BitrixDashboard() {
                               style: "currency",
                               currency: "INR",
                               maximumFractionDigits: 0,
-                            }).format(item.revenue)}
+                            }).format(item.netRevenue)}
                           </span>
                         </td>
                       </tr>
