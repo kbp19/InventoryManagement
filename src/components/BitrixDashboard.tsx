@@ -5,6 +5,7 @@ import {
   fetchBitrixData,
   fetchTotalCount,
   fetchHospitalLocations,
+  fetchListElements,
   AggregatedProduct,
 } from "@/lib/bitrix";
 import * as XLSX from "xlsx";
@@ -26,6 +27,10 @@ export default function BitrixDashboard() {
   const [syncLimit, setSyncLimit] = useState(500);
   const [hospitalLocations, setHospitalLocations] = useState<any[]>([]);
   const [selectedLocation, setSelectedLocation] = useState("All");
+  const [invoiceTypes, setInvoiceTypes] = useState<any[]>([]);
+  const [selectedInvoiceType, setSelectedInvoiceType] = useState("All");
+  const [createdAtOptions, setCreatedAtOptions] = useState<any[]>([]);
+  const [selectedCreatedAt, setSelectedCreatedAt] = useState("All");
 
   const months = [
     "January",
@@ -52,6 +57,12 @@ export default function BitrixDashboard() {
       fetchHospitalLocations(BITRIX_USER_ID, BITRIX_HOOK_SECRET).then((data) => {
         setHospitalLocations(data);
       });
+      fetchListElements(BITRIX_USER_ID, BITRIX_HOOK_SECRET, 132).then((data) => {
+        setInvoiceTypes(data);
+      });
+      fetchListElements(BITRIX_USER_ID, BITRIX_HOOK_SECRET, 104).then((data) => {
+        setCreatedAtOptions(data);
+      });
     } else {
       setHospitalLocations([]);
       setSelectedLocation("All");
@@ -71,14 +82,16 @@ export default function BitrixDashboard() {
         selectedYear,
         selectedLocation,
         "ufCrm_634952003E51B",
-        selectedDay
+        selectedDay,
+        selectedInvoiceType,
+        selectedCreatedAt
       ).then((count) => setTotalCount(count));
     } else {
       setData([]);
       setTotalInvoices(0);
       setTotalCount(0);
     }
-  }, [selectedMonth, selectedYear, selectedLocation, selectedDay]);
+  }, [selectedMonth, selectedYear, selectedLocation, selectedDay, selectedInvoiceType, selectedCreatedAt]);
 
   const handleFetch = async () => {
     if (!BITRIX_USER_ID || !BITRIX_HOOK_SECRET) {
@@ -109,7 +122,9 @@ export default function BitrixDashboard() {
           currentStart,
           currentLimit,
           "ufCrm_634952003E51B",
-          selectedDay
+          selectedDay,
+          selectedInvoiceType,
+          selectedCreatedAt
         );
 
         // Merge products
@@ -199,7 +214,7 @@ export default function BitrixDashboard() {
 
         {/* Config Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-[#E2E8F0] p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-9 gap-4 items-end">
             <div className="lg:col-span-1">
               <label className="block text-sm font-medium text-[#475569] mb-2">
                 Search Product
@@ -274,6 +289,40 @@ export default function BitrixDashboard() {
                 {hospitalLocations.map((loc: any) => (
                   <option key={loc.ID} value={loc.ID} title={loc.NAME}>
                     {loc.NAME.length > 40 ? loc.NAME.substring(0, 40) + "..." : loc.NAME}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#475569] mb-2">
+                Invoice Type
+              </label>
+              <select
+                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
+                value={selectedInvoiceType}
+                onChange={(e) => setSelectedInvoiceType(e.target.value)}
+              >
+                <option value="All">All Types</option>
+                {invoiceTypes.map((type: any) => (
+                  <option key={type.ID} value={type.ID} title={type.NAME}>
+                    {type.NAME.length > 30 ? type.NAME.substring(0, 30) + "..." : type.NAME}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#475569] mb-2">
+                Created At
+              </label>
+              <select
+                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
+                value={selectedCreatedAt}
+                onChange={(e) => setSelectedCreatedAt(e.target.value)}
+              >
+                <option value="All">All Values</option>
+                {createdAtOptions.map((opt: any) => (
+                  <option key={opt.ID} value={opt.ID} title={opt.NAME}>
+                    {opt.NAME.length > 30 ? opt.NAME.substring(0, 30) + "..." : opt.NAME}
                   </option>
                 ))}
               </select>

@@ -115,6 +115,10 @@ export async function fetchLocations(userId: string, hook: string) {
 }
 
 export async function fetchHospitalLocations(userId: string, hook: string) {
+  return fetchListElements(userId, hook, 66);
+}
+
+export async function fetchListElements(userId: string, hook: string, iblockId: number) {
   const baseUrl = `https://crm.mantracare.com/rest/${userId}/${hook}`;
   try {
     const res = await fetch(`${baseUrl}/lists.element.get.json`, {
@@ -122,13 +126,13 @@ export async function fetchHospitalLocations(userId: string, hook: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         IBLOCK_TYPE_ID: "lists",
-        IBLOCK_ID: 66,
+        IBLOCK_ID: iblockId,
       }),
     });
     const data = await res.json();
     return data.result || [];
   } catch (error) {
-    console.error("Error fetching hospital locations:", error);
+    console.error(`Error fetching list elements for IBLOCK ${iblockId}:`, error);
     return [];
   }
 }
@@ -143,6 +147,8 @@ export async function fetchBitrixData(
   limit: number = 50,
   manualFieldId?: string,
   day?: number | "All",
+  invoiceType?: string,
+  createdAt?: string,
 ) {
   const baseUrl = `https://crm.mantracare.com/rest/${userId}/${hook}`;
   const startDay = day && day !== "All" ? day : 1;
@@ -184,6 +190,14 @@ export async function fetchBitrixData(
       ">=begindate": startDate,
       "<=begindate": endDate,
     };
+
+    if (invoiceType && invoiceType !== "All") {
+      filter["ufCrm_69CA54F0B8EAC"] = invoiceType;
+    }
+
+    if (createdAt && createdAt !== "All") {
+      filter["ufCrm_686636FD83021"] = createdAt;
+    }
 
     if (filterLocationId && filterLocationId !== "All") {
       filter[actualLocationField] = filterLocationId;
@@ -374,6 +388,8 @@ export async function fetchTotalCount(
   filterLocationId?: string,
   manualFieldId?: string,
   day?: number | "All",
+  invoiceType?: string,
+  createdAt?: string,
 ) {
   const baseUrl = `https://crm.mantracare.com/rest/${userId}/${hook}`;
   const startDay = day && day !== "All" ? day : 1;
@@ -386,6 +402,14 @@ export async function fetchTotalCount(
     ">=begindate": startDate,
     "<=begindate": endDate,
   };
+
+  if (invoiceType && invoiceType !== "All") {
+    filter["ufCrm_69CA54F0B8EAC"] = invoiceType;
+  }
+
+  if (createdAt && createdAt !== "All") {
+    filter["ufCrm_686636FD83021"] = createdAt;
+  }
 
   if (filterLocationId && filterLocationId !== "All") {
     const field = manualFieldId || "locationId";
