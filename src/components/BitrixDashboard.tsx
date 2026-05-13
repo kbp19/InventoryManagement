@@ -173,6 +173,7 @@ export default function BitrixDashboard() {
         Location: item.locationId,
         Deals: item.deals,
         "Quantity Sold": item.quantitySold,
+        "Net Price": item.netPrice,
         "Revenue (INR)": item.revenue,
         "Last Transaction": item.lastDate,
       })),
@@ -516,6 +517,9 @@ export default function BitrixDashboard() {
                     Qty
                   </th>
                   <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-right">
+                    Net Price
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-right">
                     Revenue
                   </th>
                 </tr>
@@ -547,6 +551,15 @@ export default function BitrixDashboard() {
                         <td className="px-6 py-4 text-center">
                           <span className="text-[#475569] font-medium">
                             {item.quantitySold}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <span className="text-[#475569] font-medium">
+                            {new Intl.NumberFormat("en-IN", {
+                              style: "currency",
+                              currency: "INR",
+                              maximumFractionDigits: 0,
+                            }).format(item.netPrice)}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">

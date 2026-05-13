@@ -19,6 +19,7 @@ export interface AggregatedProduct {
   deals: number;
   quantitySold: number;
   revenue: number;
+  netPrice: number;
   lastDate: string;
 }
 
@@ -340,12 +341,18 @@ export async function fetchBitrixData(
                   locationId: locationName,
                   deals: 0,
                   quantitySold: 0,
-                   revenue: 0,
-                  lastDate: "",
-                };
-              }
-              productAggregation[aggKey].quantitySold += Number(row.quantity);
-              productAggregation[aggKey].revenue += Number(row.priceBrutto);
+                    revenue: 0,
+                    netPrice: 0,
+                    lastDate: "",
+                  };
+                }
+                productAggregation[aggKey].quantitySold += Number(row.quantity);
+                productAggregation[aggKey].revenue += Number(row.priceBrutto);
+                
+                // Update average net price
+                if (productAggregation[aggKey].quantitySold > 0) {
+                  productAggregation[aggKey].netPrice = productAggregation[aggKey].revenue / productAggregation[aggKey].quantitySold;
+                }
 
               const invDate = invoice?.begindate
                 ? new Date(invoice.begindate).toLocaleDateString("en-IN", {
