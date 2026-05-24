@@ -33,7 +33,9 @@ export interface EnrichedRow {
   invoiceId: number;
   invoiceTitle: string;
   createdTime: string;
+  patientId: number;
   patientName: string;
+  dealId: number;
   dealTitle: string;
   invoiceType: string;
   iolLensInfo: string;
@@ -369,28 +371,34 @@ function hydrateInvoices(
   rawInvoices: RawInvoice[],
   caches: LookupCaches,
 ): EnrichedRow[] {
-  return rawInvoices.map((inv) => {
-    const products = caches.products.get(inv.id) || [];
+  return rawInvoices.map((invoice) => {
+    const products = caches.products.get(invoice.id) || [];
     const totalAmount = products.reduce((sum, p) => sum + p.total, 0);
     const productsSummary = products
       .map((p) => `${p.name} (x${p.quantity})`)
       .join(", ");
 
     // Counselor: prefer ufCrm_619DF82A0B29B, fallback to assignedById
-    const counselorId = toNum(inv.ufCrm_619DF82A0B29B) || toNum(inv.assignedById);
+    const counselorId = toNum(invoice.ufCrm_619DF82A0B29B) || toNum(invoice.assignedById);
 
-    const locId = String(inv.ufCrm_634952003E51B || "");
+    const locId = String(invoice.ufCrm_634952003E51B || "");
 
     return {
-      invoiceId: inv.id,
-      invoiceTitle: inv.title || "",
-      createdTime: inv.createdTime || "",
-      patientName: caches.patients.get(toNum(inv.companyId)) || (toNum(inv.companyId) > 0 ? `Patient #${inv.companyId}` : "—"),
-      dealTitle: caches.deals.get(toNum(inv.parentId2)) || (toNum(inv.parentId2) > 0 ? `Deal #${inv.parentId2}` : "—"),
-      invoiceType: caches.invoiceTypes.get(toNum(inv.ufCrm_69CA54F0B8EAC)) || "—",
-      iolLensInfo: caches.iolLens.get(toNum(inv.ufCrm_672EEAD954CF9)) || "—",
-      paymentMode: caches.paymentModes.get(toNum(inv.ufCrm_682EB9C9759AE)) || "—",
-      cashCollectedAt: caches.cashCollectedAt.get(toNum(inv.ufCrm_686636FD83021)) || "—",
+      invoiceId: invoice.id,
+      invoiceTitle: invoice.title || `Invoice #${invoice.id}`,
+      createdTime: invoice.createdTime,
+      patientId: invoice.companyId,
+      patientName:
+        caches.patients.get(invoice.companyId) ||
+        (invoice.companyId ? `Unknown Company (${invoice.companyId})` : "—"),
+      dealId: invoice.parentId2,
+      dealTitle:
+        caches.deals.get(invoice.parentId2) ||
+        (invoice.parentId2 ? `Unknown Deal (${invoice.parentId2})` : "—"),
+      invoiceType: caches.invoiceTypes.get(toNum(invoice.ufCrm_69CA54F0B8EAC)) || "—",
+      iolLensInfo: caches.iolLens.get(toNum(invoice.ufCrm_672EEAD954CF9)) || "—",
+      paymentMode: caches.paymentModes.get(toNum(invoice.ufCrm_682EB9C9759AE)) || "—",
+      cashCollectedAt: caches.cashCollectedAt.get(toNum(invoice.ufCrm_686636FD83021)) || "—",
       counselorName: caches.counselors.get(counselorId) || (counselorId > 0 ? `User #${counselorId}` : "—"),
       locationName: caches.locations.get(locId) || (locId ? "—" : "—"),
       products,
@@ -446,6 +454,28 @@ export async function fetchCostSheetData(
     allInvoices = allInvoices.slice(0, limit);
   }
 
+  const rows = await enrichRawInvoices(userId, hook, allInvoices, onProgress, fetched, totalCount);
+
+  return {
+    rows,
+    totalInvoices: allInvoices.length,
+    totalCount,
+    nextStart,
+  };
+}
+
+// ─── Shared Enrichment Pipeline ──────────────────────────────────────────────
+
+export async function enrichRawInvoices(
+  userId: string,
+  hook: string,
+  allInvoices: RawInvoice[],
+  onProgress?: (fetched: number, total: number, stage: string) => void,
+  fetched: number = 0,
+  totalCount: number = 0,
+): Promise<EnrichedRow[]> {
+  if (allInvoices.length === 0) return [];
+
   // Step 2: Collect all unique IDs
   onProgress?.(fetched, totalCount, "Resolving references...");
 
@@ -499,10 +529,43 @@ export async function fetchCostSheetData(
 
   const rows = hydrateInvoices(allInvoices, caches);
 
-  return {
-    rows,
-    totalInvoices: allInvoices.length,
-    totalCount,
-    nextStart,
-  };
+  return rows;
+}
+
+// ─── Entity History ──────────────────────────────────────────────────────────
+
+export async function fetchEntityHistory(
+  userId: string,
+  hook: string,
+  entityType: "patient" | "deal",
+  entityId: number,
+): Promise<EnrichedRow[]> {
+  const url = baseUrl(userId, hook);
+  const filterKey = entityType === "patient" ? "=companyId" : "=parentId2";
+
+  let allInvoices: RawInvoice[] = [];
+  let nextStart: number | null = 0;
+
+  while (nextStart !== null) {
+    const res: Response = await fetch(`${url}/crm.item.list.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entityTypeId: 31,
+        select: INVOICE_SELECT_FIELDS,
+        order: { createdTime: "DESC" },
+        filter: { [filterKey]: entityId },
+        start: nextStart,
+      }),
+    });
+
+    const data = await res.json();
+    const items = (data.result?.items || []) as RawInvoice[];
+    allInvoices.push(...items);
+    nextStart = data.next ?? null;
+
+    if (items.length === 0) break;
+  }
+
+  return enrichRawInvoices(userId, hook, allInvoices);
 }

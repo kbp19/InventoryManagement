@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import {
   fetchCostSheetData,
   fetchInvoiceTotalCount,
+  fetchEntityHistory,
   EnrichedRow,
 } from "@/lib/costsheet";
 import * as XLSX from "xlsx";
@@ -52,7 +53,7 @@ function formatISTDate(isoString: string): string {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-type SortKey = "createdTime" | "totalAmount" | "patientName" | "counselorName";
+type SortKey = "createdTime" | "totalAmount" | "patientName" | "counselorName" | "dealTitle";
 type SortDir = "asc" | "desc";
 
 export default function CostSheetDashboard() {
@@ -63,6 +64,8 @@ export default function CostSheetDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("All");
   const [selectedCounselor, setSelectedCounselor] = useState("All");
+  const [selectedType, setSelectedType] = useState("All");
+  const [selectedDeal, setSelectedDeal] = useState("All");
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [syncLimit, setSyncLimit] = useState(500);
@@ -70,6 +73,23 @@ export default function CostSheetDashboard() {
   const [progressFetched, setProgressFetched] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("createdTime");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  // History Modal State
+  const [historyModal, setHistoryModal] = useState<{
+    isOpen: boolean;
+    type: "patient" | "deal";
+    id: number;
+    title: string;
+    data: EnrichedRow[];
+    loading: boolean;
+  }>({
+    isOpen: false,
+    type: "patient",
+    id: 0,
+    title: "",
+    data: [],
+    loading: false,
+  });
 
   // Auto-fetch total count when dates change
   React.useEffect(() => {
@@ -125,6 +145,32 @@ export default function CostSheetDashboard() {
     }
   };
 
+  // ─── History Modal Handlers ──────────────────────────────────────────────────
+
+  const handleOpenHistory = async (type: "patient" | "deal", id: number, title: string) => {
+    if (!id || !BITRIX_USER_ID || !BITRIX_HOOK_SECRET) return;
+
+    setHistoryModal({ isOpen: true, type, id, title, data: [], loading: true });
+
+    try {
+      const historyData = await fetchEntityHistory(
+        BITRIX_USER_ID,
+        BITRIX_HOOK_SECRET,
+        type,
+        id
+      );
+      setHistoryModal((prev) => ({ ...prev, data: historyData, loading: false }));
+    } catch (err: any) {
+      console.error("Failed to fetch history", err);
+      // Optional: Add a toast notification here
+      setHistoryModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  const closeHistoryModal = () => {
+    setHistoryModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
   // ─── Filter & Sort ──────────────────────────────────────────────────────────
 
   const filteredData = useMemo(() => {
@@ -151,6 +197,14 @@ export default function CostSheetDashboard() {
       result = result.filter((row) => row.counselorName === selectedCounselor);
     }
 
+    if (selectedType !== "All") {
+      result = result.filter((row) => row.invoiceType === selectedType);
+    }
+
+    if (selectedDeal !== "All") {
+      result = result.filter((row) => row.dealTitle === selectedDeal);
+    }
+
     result = [...result].sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
@@ -166,12 +220,15 @@ export default function CostSheetDashboard() {
         case "counselorName":
           cmp = a.counselorName.localeCompare(b.counselorName);
           break;
+        case "dealTitle":
+          cmp = a.dealTitle.localeCompare(b.dealTitle);
+          break;
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
 
     return result;
-  }, [data, searchQuery, selectedLocation, selectedCounselor, sortKey, sortDir]);
+  }, [data, searchQuery, selectedLocation, selectedCounselor, selectedType, selectedDeal, sortKey, sortDir]);
 
   const uniqueLocations = useMemo(() => {
     return Array.from(new Set(data.map((r) => r.locationName))).filter(l => l !== "—").sort();
@@ -179,6 +236,14 @@ export default function CostSheetDashboard() {
 
   const uniqueCounselors = useMemo(() => {
     return Array.from(new Set(data.map((r) => r.counselorName))).filter(c => c !== "—").sort();
+  }, [data]);
+
+  const uniqueTypes = useMemo(() => {
+    return Array.from(new Set(data.map((r) => r.invoiceType))).filter(t => t !== "—").sort();
+  }, [data]);
+
+  const uniqueDeals = useMemo(() => {
+    return Array.from(new Set(data.map((r) => r.dealTitle))).filter(d => d !== "—").sort();
   }, [data]);
 
   const stats = useMemo(() => {
@@ -345,10 +410,10 @@ export default function CostSheetDashboard() {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-8 gap-4 items-end mt-4">
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-[#475569] mb-2">
-                Filter by Location
+                Location
               </label>
               <select
                 className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black ${
@@ -368,7 +433,7 @@ export default function CostSheetDashboard() {
             </div>
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-[#475569] mb-2">
-                Filter by Counselor
+                Counselor
               </label>
               <select
                 className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black ${
@@ -382,6 +447,46 @@ export default function CostSheetDashboard() {
                 {uniqueCounselors.map((counselor) => (
                   <option key={counselor} value={counselor}>
                     {counselor}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-[#475569] mb-2">
+                Invoice Type
+              </label>
+              <select
+                className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black ${
+                  data.length === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
+                }`}
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                disabled={data.length === 0}
+              >
+                <option value="All">All Types</option>
+                {uniqueTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-[#475569] mb-2">
+                Deal
+              </label>
+              <select
+                className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black ${
+                  data.length === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
+                }`}
+                value={selectedDeal}
+                onChange={(e) => setSelectedDeal(e.target.value)}
+                disabled={data.length === 0}
+              >
+                <option value="All">All Deals</option>
+                {uniqueDeals.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
                   </option>
                 ))}
               </select>
@@ -550,14 +655,22 @@ export default function CostSheetDashboard() {
                           {formatISTDate(row.createdTime)}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="text-sm font-semibold text-[#1E293B] group-hover:text-[#7C3AED] transition-colors max-w-[180px] truncate" title={row.patientName}>
+                          <button
+                            onClick={() => handleOpenHistory("patient", row.patientId, row.patientName)}
+                            className="text-sm font-semibold text-[#1E293B] group-hover:text-[#7C3AED] hover:underline transition-colors max-w-[180px] truncate text-left w-full block"
+                            title={row.patientName}
+                          >
                             {row.patientName}
-                          </div>
+                          </button>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="text-sm text-[#475569] max-w-[160px] truncate" title={row.dealTitle}>
+                          <button
+                            onClick={() => handleOpenHistory("deal", row.dealId, row.dealTitle)}
+                            className="text-sm text-[#475569] hover:text-[#7C3AED] hover:underline max-w-[160px] truncate text-left w-full block transition-colors"
+                            title={row.dealTitle}
+                          >
                             {row.dealTitle}
-                          </div>
+                          </button>
                         </td>
                         <td className="px-4 py-3">
                           <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#EDE9FE] text-[#6D28D9] whitespace-nowrap">
@@ -614,6 +727,103 @@ export default function CostSheetDashboard() {
           </div>
         </div>
       </div>
+
+      {/* History Modal */}
+      {historyModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
+              <div>
+                <h3 className="text-lg font-bold text-[#1E293B]">
+                  {historyModal.type === "patient" ? "Patient History" : "Deal History"}
+                </h3>
+                <p className="text-sm text-[#64748B] mt-0.5">
+                  {historyModal.title}
+                </p>
+              </div>
+              <button
+                onClick={closeHistoryModal}
+                className="text-[#64748B] hover:text-[#1E293B] bg-white border border-[#E2E8F0] p-2 rounded-xl shadow-xs transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-auto p-6 bg-white">
+              {historyModal.loading ? (
+                <div className="flex flex-col items-center justify-center h-64 text-[#64748B]">
+                  <svg className="animate-spin h-8 w-8 text-[#7C3AED] mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <p className="font-medium animate-pulse">Fetching historical data from Bitrix...</p>
+                </div>
+              ) : historyModal.data.length === 0 ? (
+                <div className="flex items-center justify-center h-64 text-[#64748B] font-medium">
+                  No past invoices found.
+                </div>
+              ) : (
+                <div className="border border-[#E2E8F0] rounded-xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left border-collapse min-w-[800px]">
+                    <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Date</th>
+                        <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Type</th>
+                        <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Counselor</th>
+                        <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Products</th>
+                        <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E2E8F0]">
+                      {historyModal.data.map((row) => (
+                        <tr key={row.invoiceId} className="hover:bg-[#F8FAFC] transition-colors">
+                          <td className="px-4 py-3 text-sm text-[#475569] font-medium">
+                            {formatISTDate(row.createdTime)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#EDE9FE] text-[#6D28D9] whitespace-nowrap">
+                              {row.invoiceType}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[#475569]">
+                            {row.counselorName}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-[#64748B] max-w-[200px] truncate" title={row.productsSummary}>
+                            {row.productsSummary}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-[#0F172A] font-bold text-right whitespace-nowrap">
+                            {new Intl.NumberFormat("en-IN", {
+                              style: "currency",
+                              currency: "INR",
+                              maximumFractionDigits: 0,
+                            }).format(row.totalAmount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            {!historyModal.loading && historyModal.data.length > 0 && (
+              <div className="px-6 py-4 bg-[#F8FAFC] border-t border-[#E2E8F0] flex justify-between items-center text-sm">
+                <span className="font-semibold text-[#475569] bg-white px-3 py-1.5 rounded-lg border border-[#E2E8F0] shadow-xs">
+                  {historyModal.data.length} Total Invoices
+                </span>
+                <span className="font-bold text-[#10B981] bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 text-base">
+                  {new Intl.NumberFormat("en-IN", {
+                    style: "currency",
+                    currency: "INR",
+                    maximumFractionDigits: 0,
+                  }).format(historyModal.data.reduce((s, r) => s + r.totalAmount, 0))}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
