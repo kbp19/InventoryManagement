@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   fetchCostSheetData,
   fetchInvoiceTotalCount,
@@ -55,6 +55,101 @@ function formatISTDate(isoString: string): string {
 
 type SortKey = "createdTime" | "totalAmount" | "patientName" | "counselorName" | "dealTitle";
 type SortDir = "asc" | "desc";
+
+// ─── Searchable Dropdown ─────────────────────────────────────────────────────
+
+function SearchableDropdown({
+  options,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+}: {
+  options: string[];
+  value: string;
+  onChange: (val: string) => void;
+  disabled: boolean;
+  placeholder: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    if (!search) return ["All", ...options];
+    const q = search.toLowerCase();
+    return ["All", ...options].filter((o) => o.toLowerCase().includes(q));
+  }, [options, search]);
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <div
+        className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] bg-white flex items-center justify-between transition-all ${
+          disabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "text-[#1E293B] cursor-pointer hover:border-[#3B82F6]"
+        }`}
+        onClick={() => {
+          if (!disabled) {
+            setIsOpen(!isOpen);
+            setSearch("");
+          }
+        }}
+      >
+        <span className="truncate">{value === "All" ? placeholder : value}</span>
+        <svg className="w-4 h-4 text-[#64748B]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      
+      {isOpen && (
+        <div className="absolute z-20 w-full mt-1 bg-white border border-[#E2E8F0] shadow-lg rounded-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="p-2 border-b border-[#E2E8F0]">
+            <input
+              type="text"
+              autoFocus
+              className="w-full px-3 py-1.5 bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg text-sm focus:outline-none focus:border-[#3B82F6] focus:ring-1 focus:ring-[#3B82F6] text-black"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <ul className="max-h-60 overflow-y-auto custom-scrollbar">
+            {filteredOptions.length === 0 ? (
+              <li className="px-4 py-3 text-sm text-[#64748B] text-center">No results found</li>
+            ) : (
+              filteredOptions.map((opt) => (
+                <li
+                  key={opt}
+                  className={`px-4 py-2 text-sm cursor-pointer hover:bg-[#F1F5F9] transition-colors ${
+                    value === opt ? "bg-[#EFF6FF] text-[#3B82F6] font-semibold" : "text-[#1E293B]"
+                  }`}
+                  onClick={() => {
+                    onChange(opt);
+                    setIsOpen(false);
+                  }}
+                >
+                  {opt === "All" ? placeholder : opt}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function CostSheetDashboard() {
   const [startDate, setStartDate] = useState(firstOfMonthIST);
@@ -263,7 +358,7 @@ export default function CostSheetDashboard() {
     }
   };
 
-  const SortIcon = ({ field }: { field: SortKey }) => {
+  const renderSortIcon = (field: SortKey) => {
     if (sortKey !== field) return <span className="ml-1 text-[#CBD5E1]">↕</span>;
     return <span className="ml-1 text-[#3B82F6]">{sortDir === "asc" ? "↑" : "↓"}</span>;
   };
@@ -415,81 +510,49 @@ export default function CostSheetDashboard() {
               <label className="block text-sm font-medium text-[#475569] mb-2">
                 Location
               </label>
-              <select
-                className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black ${
-                  data.length === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
-                }`}
+              <SearchableDropdown
+                options={uniqueLocations}
                 value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
+                onChange={setSelectedLocation}
                 disabled={data.length === 0}
-              >
-                <option value="All">All Locations</option>
-                {uniqueLocations.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </select>
+                placeholder="All Locations"
+              />
             </div>
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-[#475569] mb-2">
                 Counselor
               </label>
-              <select
-                className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black ${
-                  data.length === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
-                }`}
+              <SearchableDropdown
+                options={uniqueCounselors}
                 value={selectedCounselor}
-                onChange={(e) => setSelectedCounselor(e.target.value)}
+                onChange={setSelectedCounselor}
                 disabled={data.length === 0}
-              >
-                <option value="All">All Counselors</option>
-                {uniqueCounselors.map((counselor) => (
-                  <option key={counselor} value={counselor}>
-                    {counselor}
-                  </option>
-                ))}
-              </select>
+                placeholder="All Counselors"
+              />
             </div>
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-[#475569] mb-2">
                 Invoice Type
               </label>
-              <select
-                className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black ${
-                  data.length === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
-                }`}
+              <SearchableDropdown
+                options={uniqueTypes}
                 value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
+                onChange={setSelectedType}
                 disabled={data.length === 0}
-              >
-                <option value="All">All Types</option>
-                {uniqueTypes.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+                placeholder="All Types"
+              />
             </div>
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-[#475569] mb-2">
                 Deal
               </label>
-              <select
-                className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black ${
-                  data.length === 0 ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""
-                }`}
+              <SearchableDropdown
+                options={uniqueDeals}
                 value={selectedDeal}
-                onChange={(e) => setSelectedDeal(e.target.value)}
+                onChange={setSelectedDeal}
                 disabled={data.length === 0}
-              >
-                <option value="All">All Deals</option>
-                {uniqueDeals.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+                placeholder="All Deals"
+              />
             </div>
           </div>
 
@@ -601,16 +664,19 @@ export default function CostSheetDashboard() {
                     className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-[#3B82F6] select-none"
                     onClick={() => handleSort("createdTime")}
                   >
-                    Date <SortIcon field="createdTime" />
+                    Date {renderSortIcon("createdTime")}
                   </th>
                   <th
                     className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-[#3B82F6] select-none"
                     onClick={() => handleSort("patientName")}
                   >
-                    Patient <SortIcon field="patientName" />
+                    Patient {renderSortIcon("patientName")}
                   </th>
-                  <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
-                    Deal
+                  <th
+                    className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-[#3B82F6] select-none"
+                    onClick={() => handleSort("dealTitle")}
+                  >
+                    Deal {renderSortIcon("dealTitle")}
                   </th>
                   <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
                     Type
@@ -628,7 +694,7 @@ export default function CostSheetDashboard() {
                     className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-[#3B82F6] select-none"
                     onClick={() => handleSort("counselorName")}
                   >
-                    Counselor <SortIcon field="counselorName" />
+                    Counselor {renderSortIcon("counselorName")}
                   </th>
                   <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
                     Products
@@ -637,7 +703,7 @@ export default function CostSheetDashboard() {
                     className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap text-right cursor-pointer hover:text-[#3B82F6] select-none"
                     onClick={() => handleSort("totalAmount")}
                   >
-                    Amount <SortIcon field="totalAmount" />
+                    Amount {renderSortIcon("totalAmount")}
                   </th>
                 </tr>
               </thead>
