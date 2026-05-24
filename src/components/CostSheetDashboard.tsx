@@ -300,6 +300,23 @@ export default function CostSheetDashboard() {
       result = result.filter((row) => row.dealTitle === selectedDeal);
     }
 
+    // Group by Deal ID to collapse multiple invoices for the same deal into one row
+    const groupedMap = new Map<string, EnrichedRow>();
+    for (const row of result) {
+      const key = row.dealId ? `deal_${row.dealId}` : `inv_${row.invoiceId}`;
+      if (!groupedMap.has(key)) {
+        groupedMap.set(key, { ...row, products: [...row.products] });
+      } else {
+        const existing = groupedMap.get(key)!;
+        existing.totalAmount += row.totalAmount;
+        existing.products.push(...row.products);
+        existing.productsSummary = existing.products
+          .map((p) => `${p.name} (x${p.quantity})`)
+          .join(", ");
+      }
+    }
+    result = Array.from(groupedMap.values());
+
     result = [...result].sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
@@ -684,12 +701,6 @@ export default function CostSheetDashboard() {
                   <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
                     IOL / Lens
                   </th>
-                  <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
-                    Payment
-                  </th>
-                  <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap">
-                    Cash At
-                  </th>
                   <th
                     className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-[#3B82F6] select-none"
                     onClick={() => handleSort("counselorName")}
@@ -746,16 +757,6 @@ export default function CostSheetDashboard() {
                         <td className="px-4 py-3">
                           <span className="text-sm text-[#475569] max-w-[120px] truncate block" title={row.iolLensInfo}>
                             {row.iolLensInfo}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#FEF3C7] text-[#92400E] whitespace-nowrap">
-                            {row.paymentMode}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-[#475569] max-w-[120px] truncate block" title={row.cashCollectedAt}>
-                            {row.cashCollectedAt}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -837,6 +838,8 @@ export default function CostSheetDashboard() {
                       <tr>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Date</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Type</th>
+                        <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Payment</th>
+                        <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Cash At</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Counselor</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Products</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider text-right">Amount</th>
@@ -851,6 +854,16 @@ export default function CostSheetDashboard() {
                           <td className="px-4 py-3">
                             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#EDE9FE] text-[#6D28D9] whitespace-nowrap">
                               {row.invoiceType}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#FEF3C7] text-[#92400E] whitespace-nowrap">
+                              {row.paymentMode}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-[#475569] max-w-[120px] truncate block" title={row.cashCollectedAt}>
+                              {row.cashCollectedAt}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-sm text-[#475569]">
