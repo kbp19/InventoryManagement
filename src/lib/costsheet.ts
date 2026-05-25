@@ -351,12 +351,17 @@ export async function fetchProductRows(
       idChunk.forEach((id, i) => {
         const result = data.result.result[`q${i}`];
         const rows = result?.productRows || [];
-        const products: ProductDetail[] = rows.map((r: any) => ({
-          name: r.productName || "Unknown",
-          quantity: Number(r.quantity) || 0,
-          price: Number(r.price) || 0,
-          total: Number(r.priceBrutto) || 0,
-        }));
+        const products: ProductDetail[] = rows.map((r: any) => {
+          const qty = Number(r.quantity) || 1;
+          const price = Number(r.price) || 0;
+          const brutto = Number(r.priceBrutto);
+          return {
+            name: r.productName || "Unknown",
+            quantity: qty,
+            price: price,
+            total: (brutto !== 0 && !isNaN(brutto)) ? brutto : (price * qty),
+          };
+        });
         map.set(id, products);
       });
     }

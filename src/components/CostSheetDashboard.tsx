@@ -161,6 +161,7 @@ export default function CostSheetDashboard() {
   const [selectedCounselor, setSelectedCounselor] = useState("All");
   const [selectedType, setSelectedType] = useState("All");
   const [selectedDeal, setSelectedDeal] = useState("All");
+  const [selectedCashCounter, setSelectedCashCounter] = useState("All");
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [syncLimit, setSyncLimit] = useState(500);
@@ -300,6 +301,10 @@ export default function CostSheetDashboard() {
       result = result.filter((row) => row.dealTitle === selectedDeal);
     }
 
+    if (selectedCashCounter !== "All") {
+      result = result.filter((row) => row.cashCollectedAt === selectedCashCounter);
+    }
+
     // Group by Deal ID to collapse multiple invoices for the same deal into one row
     const groupedMap = new Map<string, EnrichedRow>();
     for (const row of result) {
@@ -340,7 +345,7 @@ export default function CostSheetDashboard() {
     });
 
     return result;
-  }, [data, searchQuery, selectedLocation, selectedCounselor, selectedType, selectedDeal, sortKey, sortDir]);
+  }, [data, searchQuery, selectedLocation, selectedCounselor, selectedType, selectedDeal, selectedCashCounter, sortKey, sortDir]);
 
   const uniqueLocations = useMemo(() => {
     return Array.from(new Set(data.map((r) => r.locationName))).filter(l => l !== "—").sort();
@@ -356,6 +361,10 @@ export default function CostSheetDashboard() {
 
   const uniqueDeals = useMemo(() => {
     return Array.from(new Set(data.map((r) => r.dealTitle))).filter(d => d !== "—").sort();
+  }, [data]);
+
+  const uniqueCashCounters = useMemo(() => {
+    return Array.from(new Set(data.map((r) => r.cashCollectedAt))).filter(c => c !== "—").sort();
   }, [data]);
 
   const stats = useMemo(() => {
@@ -522,7 +531,7 @@ export default function CostSheetDashboard() {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-8 gap-4 items-end mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-10 gap-4 items-end mt-4">
             <div className="lg:col-span-2">
               <label className="block text-sm font-medium text-[#475569] mb-2">
                 Location
@@ -569,6 +578,18 @@ export default function CostSheetDashboard() {
                 onChange={setSelectedDeal}
                 disabled={data.length === 0}
                 placeholder="All Deals"
+              />
+            </div>
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-[#475569] mb-2">
+                Cash Counter
+              </label>
+              <SearchableDropdown
+                options={uniqueCashCounters}
+                value={selectedCashCounter}
+                onChange={setSelectedCashCounter}
+                disabled={data.length === 0}
+                placeholder="All Counters"
               />
             </div>
           </div>
