@@ -60,14 +60,14 @@ type SortDir = "asc" | "desc";
 
 function SearchableDropdown({
   options,
-  value,
+  selectedValues,
   onChange,
   disabled,
   placeholder,
 }: {
   options: string[];
-  value: string;
-  onChange: (val: string) => void;
+  selectedValues: string[];
+  onChange: (val: string[]) => void;
   disabled: boolean;
   placeholder: string;
 }) {
@@ -86,15 +86,28 @@ function SearchableDropdown({
   }, []);
 
   const filteredOptions = useMemo(() => {
-    if (!search) return ["All", ...options];
+    if (!search) return options;
     const q = search.toLowerCase();
-    return ["All", ...options].filter((o) => o.toLowerCase().includes(q));
+    return options.filter((o) => o.toLowerCase().includes(q));
   }, [options, search]);
+
+  const toggleOption = (opt: string) => {
+    if (selectedValues.includes(opt)) {
+      onChange(selectedValues.filter(v => v !== opt));
+    } else {
+      onChange([...selectedValues, opt]);
+    }
+  };
+
+  const clearAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange([]);
+  };
 
   return (
     <div className="relative w-full" ref={containerRef}>
       <div
-        className={`w-full px-4 py-2 rounded-xl border border-[#CBD5E1] bg-white flex items-center justify-between transition-all ${
+        className={`w-full min-h-[42px] px-3 py-1.5 rounded-xl border border-[#CBD5E1] bg-white flex flex-wrap items-center gap-1.5 transition-all ${
           disabled ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "text-[#1E293B] cursor-pointer hover:border-[#3B82F6]"
         }`}
         onClick={() => {
@@ -104,8 +117,39 @@ function SearchableDropdown({
           }
         }}
       >
-        <span className="truncate">{value === "All" ? placeholder : value}</span>
-        <svg className="w-4 h-4 text-[#64748B]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {selectedValues.length === 0 ? (
+          <span className="text-[#94A3B8] px-1 py-0.5">{placeholder}</span>
+        ) : (
+          selectedValues.map(val => (
+            <span key={val} className="flex items-center gap-1 bg-[#F1F5F9] border border-[#E2E8F0] px-2 py-0.5 rounded-md text-xs font-medium text-[#475569]">
+              <span className="max-w-[100px] truncate">{val}</span>
+              <button
+                type="button"
+                className="hover:text-red-500 rounded-full flex-shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleOption(val);
+                }}
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </span>
+          ))
+        )}
+        <div className="flex-1 min-w-[2px]" />
+        {selectedValues.length > 0 && !disabled && (
+          <button
+            type="button"
+            className="p-1 hover:text-red-500 text-[#94A3B8] transition-colors mr-1"
+            onClick={clearAll}
+            title="Clear all"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+        <svg className={`w-4 h-4 text-[#64748B] transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
         </svg>
       </div>
@@ -127,20 +171,24 @@ function SearchableDropdown({
             {filteredOptions.length === 0 ? (
               <li className="px-4 py-3 text-sm text-[#64748B] text-center">No results found</li>
             ) : (
-              filteredOptions.map((opt) => (
-                <li
-                  key={opt}
-                  className={`px-4 py-2 text-sm cursor-pointer hover:bg-[#F1F5F9] transition-colors ${
-                    value === opt ? "bg-[#EFF6FF] text-[#3B82F6] font-semibold" : "text-[#1E293B]"
-                  }`}
-                  onClick={() => {
-                    onChange(opt);
-                    setIsOpen(false);
-                  }}
-                >
-                  {opt === "All" ? placeholder : opt}
-                </li>
-              ))
+              filteredOptions.map((opt) => {
+                const isSelected = selectedValues.includes(opt);
+                return (
+                  <li
+                    key={opt}
+                    className={`px-4 py-2 text-sm cursor-pointer hover:bg-[#F1F5F9] flex items-center gap-2 transition-colors ${
+                      isSelected ? "bg-[#EFF6FF] text-[#3B82F6] font-semibold" : "text-[#1E293B]"
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleOption(opt);
+                    }}
+                  >
+                    <input type="checkbox" checked={isSelected} readOnly className="rounded border-gray-300 text-[#3B82F6] focus:ring-[#3B82F6] w-3.5 h-3.5" />
+                    <span className="truncate">{opt}</span>
+                  </li>
+                );
+              })
             )}
           </ul>
         </div>
@@ -157,11 +205,11 @@ export default function CostSheetDashboard() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<EnrichedRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState("All");
-  const [selectedCounselor, setSelectedCounselor] = useState("All");
-  const [selectedType, setSelectedType] = useState("All");
-  const [selectedDeal, setSelectedDeal] = useState("All");
-  const [selectedCashCounter, setSelectedCashCounter] = useState("All");
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const [selectedCounselors, setSelectedCounselors] = useState<string[]>([]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [selectedDeals, setSelectedDeals] = useState<string[]>([]);
+  const [selectedCashCounters, setSelectedCashCounters] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [syncLimit, setSyncLimit] = useState(500);
@@ -257,20 +305,20 @@ export default function CostSheetDashboard() {
       );
 
       // Apply active dashboard filters (except date) to the history data
-      if (selectedLocation !== "All") {
-        historyData = historyData.filter(r => r.locationName === selectedLocation);
+      if (selectedLocations.length > 0) {
+        historyData = historyData.filter(r => selectedLocations.includes(r.locationName));
       }
-      if (selectedCounselor !== "All") {
-        historyData = historyData.filter(r => r.counselorName === selectedCounselor);
+      if (selectedCounselors.length > 0) {
+        historyData = historyData.filter(r => selectedCounselors.includes(r.counselorName));
       }
-      if (selectedType !== "All") {
-        historyData = historyData.filter(r => r.invoiceType === selectedType);
+      if (selectedTypes.length > 0) {
+        historyData = historyData.filter(r => selectedTypes.includes(r.invoiceType));
       }
-      if (selectedDeal !== "All") {
-        historyData = historyData.filter(r => r.dealTitle === selectedDeal);
+      if (selectedDeals.length > 0) {
+        historyData = historyData.filter(r => selectedDeals.includes(r.dealTitle));
       }
-      if (selectedCashCounter !== "All") {
-        historyData = historyData.filter(r => r.cashCollectedAt === selectedCashCounter);
+      if (selectedCashCounters.length > 0) {
+        historyData = historyData.filter(r => selectedCashCounters.includes(r.cashCollectedAt));
       }
 
       setHistoryModal((prev) => ({ ...prev, data: historyData, loading: false }));
@@ -303,24 +351,24 @@ export default function CostSheetDashboard() {
       );
     }
 
-    if (selectedLocation !== "All") {
-      result = result.filter((row) => row.locationName === selectedLocation);
+    if (selectedLocations.length > 0) {
+      result = result.filter((row) => selectedLocations.includes(row.locationName));
     }
 
-    if (selectedCounselor !== "All") {
-      result = result.filter((row) => row.counselorName === selectedCounselor);
+    if (selectedCounselors.length > 0) {
+      result = result.filter((row) => selectedCounselors.includes(row.counselorName));
     }
 
-    if (selectedType !== "All") {
-      result = result.filter((row) => row.invoiceType === selectedType);
+    if (selectedTypes.length > 0) {
+      result = result.filter((row) => selectedTypes.includes(row.invoiceType));
     }
 
-    if (selectedDeal !== "All") {
-      result = result.filter((row) => row.dealTitle === selectedDeal);
+    if (selectedDeals.length > 0) {
+      result = result.filter((row) => selectedDeals.includes(row.dealTitle));
     }
 
-    if (selectedCashCounter !== "All") {
-      result = result.filter((row) => row.cashCollectedAt === selectedCashCounter);
+    if (selectedCashCounters.length > 0) {
+      result = result.filter((row) => selectedCashCounters.includes(row.cashCollectedAt));
     }
 
     // Group by Deal ID to collapse multiple invoices for the same deal into one row
@@ -363,7 +411,7 @@ export default function CostSheetDashboard() {
     });
 
     return result;
-  }, [data, searchQuery, selectedLocation, selectedCounselor, selectedType, selectedDeal, selectedCashCounter, sortKey, sortDir]);
+  }, [data, searchQuery, selectedLocations, selectedCounselors, selectedTypes, selectedDeals, selectedCashCounters, sortKey, sortDir]);
 
   const uniqueLocations = useMemo(() => {
     return Array.from(new Set(data.map((r) => r.locationName))).filter(l => l !== "—").sort();
@@ -556,8 +604,8 @@ export default function CostSheetDashboard() {
               </label>
               <SearchableDropdown
                 options={uniqueLocations}
-                value={selectedLocation}
-                onChange={setSelectedLocation}
+                selectedValues={selectedLocations}
+                onChange={setSelectedLocations}
                 disabled={data.length === 0}
                 placeholder="All Locations"
               />
@@ -568,8 +616,8 @@ export default function CostSheetDashboard() {
               </label>
               <SearchableDropdown
                 options={uniqueCounselors}
-                value={selectedCounselor}
-                onChange={setSelectedCounselor}
+                selectedValues={selectedCounselors}
+                onChange={setSelectedCounselors}
                 disabled={data.length === 0}
                 placeholder="All Counselors"
               />
@@ -580,8 +628,8 @@ export default function CostSheetDashboard() {
               </label>
               <SearchableDropdown
                 options={uniqueTypes}
-                value={selectedType}
-                onChange={setSelectedType}
+                selectedValues={selectedTypes}
+                onChange={setSelectedTypes}
                 disabled={data.length === 0}
                 placeholder="All Types"
               />
@@ -592,8 +640,8 @@ export default function CostSheetDashboard() {
               </label>
               <SearchableDropdown
                 options={uniqueDeals}
-                value={selectedDeal}
-                onChange={setSelectedDeal}
+                selectedValues={selectedDeals}
+                onChange={setSelectedDeals}
                 disabled={data.length === 0}
                 placeholder="All Deals"
               />
@@ -604,8 +652,8 @@ export default function CostSheetDashboard() {
               </label>
               <SearchableDropdown
                 options={uniqueCashCounters}
-                value={selectedCashCounter}
-                onChange={setSelectedCashCounter}
+                selectedValues={selectedCashCounters}
+                onChange={setSelectedCashCounters}
                 disabled={data.length === 0}
                 placeholder="All Counters"
               />
