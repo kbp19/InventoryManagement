@@ -19,6 +19,8 @@ export interface RawInvoice {
   ufCrm_686636FD83021: number | string;
   assignedById: number;
   ufCrm_619DF82A0B29B: number | string;
+  ufCrm_634952003E51B: number | string;
+  opportunity?: number | string;
   [key: string]: any;
 }
 
@@ -112,6 +114,7 @@ const INVOICE_SELECT_FIELDS = [
   "assignedById",
   "ufCrm_619DF82A0B29B",
   "ufCrm_634952003E51B",
+  "opportunity",
 ];
 
 export async function fetchInvoicesByDateRange(
@@ -351,17 +354,12 @@ export async function fetchProductRows(
       idChunk.forEach((id, i) => {
         const result = data.result.result[`q${i}`];
         const rows = result?.productRows || [];
-        const products: ProductDetail[] = rows.map((r: any) => {
-          const qty = Number(r.quantity) || 1;
-          const price = Number(r.price) || 0;
-          const brutto = Number(r.priceBrutto);
-          return {
-            name: r.productName || "Unknown",
-            quantity: qty,
-            price: price,
-            total: (brutto !== 0 && !isNaN(brutto)) ? brutto : (price * qty),
-          };
-        });
+        const products: ProductDetail[] = rows.map((r: any) => ({
+          name: r.productName || "Unknown",
+          quantity: Number(r.quantity) || 0,
+          price: Number(r.price) || 0,
+          total: Number(r.priceBrutto) || 0,
+        }));
         map.set(id, products);
       });
     }
@@ -378,7 +376,12 @@ function hydrateInvoices(
 ): EnrichedRow[] {
   return rawInvoices.map((invoice) => {
     const products = caches.products.get(invoice.id) || [];
-    const totalAmount = products.reduce((sum, p) => sum + p.total, 0);
+    
+    // Use the exact invoice opportunity from Bitrix, fallback to summing products only if undefined
+    const totalAmount = invoice.opportunity !== undefined && invoice.opportunity !== null
+      ? Number(invoice.opportunity)
+      : products.reduce((sum, p) => sum + p.total, 0);
+
     const productsSummary = products
       .map((p) => `${p.name} (x${p.quantity})`)
       .join(", ");
