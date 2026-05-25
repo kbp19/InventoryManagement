@@ -249,12 +249,30 @@ export default function CostSheetDashboard() {
     setHistoryModal({ isOpen: true, type, id, title, data: [], loading: true });
 
     try {
-      const historyData = await fetchEntityHistory(
+      let historyData = await fetchEntityHistory(
         BITRIX_USER_ID,
         BITRIX_HOOK_SECRET,
         type,
         id
       );
+
+      // Apply active dashboard filters (except date) to the history data
+      if (selectedLocation !== "All") {
+        historyData = historyData.filter(r => r.locationName === selectedLocation);
+      }
+      if (selectedCounselor !== "All") {
+        historyData = historyData.filter(r => r.counselorName === selectedCounselor);
+      }
+      if (selectedType !== "All") {
+        historyData = historyData.filter(r => r.invoiceType === selectedType);
+      }
+      if (selectedDeal !== "All") {
+        historyData = historyData.filter(r => r.dealTitle === selectedDeal);
+      }
+      if (selectedCashCounter !== "All") {
+        historyData = historyData.filter(r => r.cashCollectedAt === selectedCashCounter);
+      }
+
       setHistoryModal((prev) => ({ ...prev, data: historyData, loading: false }));
     } catch (err: any) {
       console.error("Failed to fetch history", err);
@@ -853,11 +871,14 @@ export default function CostSheetDashboard() {
                   No past invoices found.
                 </div>
               ) : (
-                <div className="border border-[#E2E8F0] rounded-xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left border-collapse min-w-[800px]">
+                <div className="border border-[#E2E8F0] rounded-xl overflow-auto shadow-sm">
+                  <table className="w-full text-left border-collapse min-w-[1000px]">
                     <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] sticky top-0 z-10">
                       <tr>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Date</th>
+                        {historyModal.type === "patient" && (
+                          <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Deal</th>
+                        )}
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Type</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Payment</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Cash At</th>
@@ -872,6 +893,13 @@ export default function CostSheetDashboard() {
                           <td className="px-4 py-3 text-sm text-[#475569] font-medium">
                             {formatISTDate(row.createdTime)}
                           </td>
+                          {historyModal.type === "patient" && (
+                            <td className="px-4 py-3">
+                              <span className="text-sm text-[#475569] max-w-[140px] truncate block" title={row.dealTitle}>
+                                {row.dealTitle}
+                              </span>
+                            </td>
+                          )}
                           <td className="px-4 py-3">
                             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#EDE9FE] text-[#6D28D9] whitespace-nowrap">
                               {row.invoiceType}
