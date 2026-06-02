@@ -20,6 +20,8 @@ export interface RawInvoice {
   assignedById: number;
   ufCrm_619DF82A0B29B: number | string;
   ufCrm_634952003E51B: number | string;
+  ufCrm_67E7CF2771A7D?: number | string;
+  ufCrm_619DF8291C1AF?: number | string;
   opportunity?: number | string;
   [key: string]: any;
 }
@@ -45,6 +47,7 @@ export interface EnrichedRow {
   cashCollectedAt: string;
   counselorName: string;
   locationName: string;
+  panelName: string;
   products: ProductDetail[];
   productsSummary: string;
   totalAmount: number;
@@ -66,7 +69,20 @@ interface LookupCaches {
   cashCollectedAt: Map<number, string>;
   counselors: Map<number, string>;
   locations: Map<string, string>;
+  panels: Map<number | string, string>;
+  tpas: Map<number | string, string>;
   products: Map<number, ProductDetail[]>;
+}
+
+let smartInvoiceFieldsCache: any = null;
+
+async function getSmartInvoiceFields(userId: string, hook: string) {
+  if (smartInvoiceFieldsCache) return smartInvoiceFieldsCache;
+  const url = baseUrl(userId, hook);
+  const res = await fetch(`${url}/crm.item.fields?entityTypeId=31`);
+  const data = await res.json();
+  smartInvoiceFieldsCache = data.result?.fields || {};
+  return smartInvoiceFieldsCache;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -114,6 +130,8 @@ const INVOICE_SELECT_FIELDS = [
   "assignedById",
   "ufCrm_619DF82A0B29B",
   "ufCrm_634952003E51B",
+  "ufCrm_67E7CF2771A7D",
+  "ufCrm_619DF8291C1AF",
   "opportunity",
 ];
 
@@ -390,6 +408,10 @@ function hydrateInvoices(
     const counselorId = toNum(invoice.ufCrm_619DF82A0B29B) || toNum(invoice.assignedById);
 
     const locId = String(invoice.ufCrm_634952003E51B || "");
+    
+    const pName = caches.panels.get(String(invoice.ufCrm_67E7CF2771A7D)) || "";
+    const tName = caches.tpas.get(String(invoice.ufCrm_619DF8291C1AF)) || "";
+    const panelName = [pName, tName].filter(Boolean).join(" / ") || "—";
 
     return {
       invoiceId: invoice.id,
@@ -409,6 +431,7 @@ function hydrateInvoices(
       cashCollectedAt: caches.cashCollectedAt.get(toNum(invoice.ufCrm_686636FD83021)) || "—",
       counselorName: caches.counselors.get(counselorId) || (counselorId > 0 ? `User #${counselorId}` : "—"),
       locationName: caches.locations.get(locId) || (locId ? "—" : "—"),
+      panelName,
       products,
       productsSummary: productsSummary || "—",
       totalAmount,
@@ -501,7 +524,7 @@ export async function enrichRawInvoices(
   // Step 3: Parallel bulk lookups
   onProgress?.(fetched, totalCount, "Enriching data...");
 
-  const [patients, deals, invoiceTypes, iolLens, paymentModes, cashCollectedAt, counselors, products, hospitalLocs] =
+  const [patients, deals, invoiceTypes, iolLens, paymentModes, cashCollectedAt, counselors, products, hospitalLocs, fieldsMeta] =
     await Promise.all([
       bulkResolvePatients(userId, hook, patientIds),
       bulkResolveDeals(userId, hook, dealIds),
@@ -512,6 +535,7 @@ export async function enrichRawInvoices(
       bulkResolveUsers(userId, hook, counselorIds),
       fetchProductRows(userId, hook, invoiceIds),
       fetchHospitalLocations(userId, hook),
+      getSmartInvoiceFields(userId, hook),
     ]);
 
   // Build location map from hospital locations list (IBLOCK 66)
@@ -519,6 +543,14 @@ export async function enrichRawInvoices(
   hospitalLocs.forEach((loc: any) => {
     locations.set(String(loc.ID), loc.NAME);
   });
+
+  const panelField = fieldsMeta["ufCrm_67E7CF2771A7D"]?.items || [];
+  const tpaField = fieldsMeta["ufCrm_619DF8291C1AF"]?.items || [];
+  
+  const panels = new Map<number | string, string>();
+  panelField.forEach((i: any) => panels.set(String(i.ID), i.VALUE));
+  const tpas = new Map<number | string, string>();
+  tpaField.forEach((i: any) => tpas.set(String(i.ID), i.VALUE));
 
   // Step 4: Hydrate
   onProgress?.(fetched, totalCount, "Building cost sheet...");
@@ -532,6 +564,8 @@ export async function enrichRawInvoices(
     cashCollectedAt,
     counselors,
     locations,
+    panels,
+    tpas,
     products,
   };
 

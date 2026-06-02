@@ -470,6 +470,7 @@ export default function CostSheetDashboard() {
         "Invoice Type": row.invoiceType,
         "IOL / Lens / Injection": row.iolLensInfo,
         "Payment Mode": row.paymentMode,
+        "Panel Name": row.panelName,
         "Cash Collected At": row.cashCollectedAt,
         "Counselor": row.counselorName,
         "Products": row.productsSummary,
@@ -929,6 +930,7 @@ export default function CostSheetDashboard() {
                         )}
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Type</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Payment</th>
+                        <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Panel</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Cash At</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Counselor</th>
                         <th className="px-4 py-3 text-xs font-bold text-[#64748B] uppercase tracking-wider">Products</th>
@@ -956,6 +958,11 @@ export default function CostSheetDashboard() {
                           <td className="px-4 py-3">
                             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#FEF3C7] text-[#92400E] whitespace-nowrap">
                               {row.paymentMode}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-[#475569] max-w-[120px] truncate block" title={row.panelName}>
+                              {row.panelName}
                             </span>
                           </td>
                           <td className="px-4 py-3">
