@@ -16,9 +16,15 @@ const BITRIX_USER_ID = process.env.NEXT_PUBLIC_BITRIX_USER_ID || "";
 const BITRIX_HOOK_SECRET = process.env.NEXT_PUBLIC_BITRIX_HOOK_SECRET || "";
 
 export default function BitrixDashboard() {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedDay, setSelectedDay] = useState<number | "All">("All");
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const currentDate = new Date();
+  const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  
+  const [customStartDate, setCustomStartDate] = useState(
+    firstDay.toISOString().split("T")[0]
+  );
+  const [customEndDate, setCustomEndDate] = useState(
+    currentDate.toISOString().split("T")[0]
+  );
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AggregatedProduct[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -32,26 +38,6 @@ export default function BitrixDashboard() {
   const [selectedInvoiceType, setSelectedInvoiceType] = useState("All");
   const [createdAtOptions, setCreatedAtOptions] = useState<any[]>([]);
   const [selectedCreatedAt, setSelectedCreatedAt] = useState("All");
-
-  const months = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
-
-  const years = Array.from(
-    { length: 5 },
-    (_, i) => new Date().getFullYear() - i,
-  );
 
   React.useEffect(() => {
     if (BITRIX_USER_ID && BITRIX_HOOK_SECRET) {
@@ -70,20 +56,19 @@ export default function BitrixDashboard() {
     }
   }, []);
 
-  // Auto-fetch total count and clear old data when month/year changes
+  // Auto-fetch total count and clear old data when dates change
   React.useEffect(() => {
-    if (BITRIX_USER_ID && BITRIX_HOOK_SECRET) {
+    if (BITRIX_USER_ID && BITRIX_HOOK_SECRET && customStartDate && customEndDate) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setData([]);
       setTotalInvoices(0);
       fetchTotalCount(
         BITRIX_USER_ID,
         BITRIX_HOOK_SECRET,
-        selectedMonth,
-        selectedYear,
+        customStartDate,
+        customEndDate,
         selectedLocation,
         "ufCrm_634952003E51B",
-        selectedDay,
         selectedInvoiceType,
         selectedCreatedAt
       ).then((count) => setTotalCount(count));
@@ -92,7 +77,7 @@ export default function BitrixDashboard() {
       setTotalInvoices(0);
       setTotalCount(0);
     }
-  }, [selectedMonth, selectedYear, selectedLocation, selectedDay, selectedInvoiceType, selectedCreatedAt]);
+  }, [customStartDate, customEndDate, selectedLocation, selectedInvoiceType, selectedCreatedAt]);
 
   const handleFetch = async () => {
     if (!BITRIX_USER_ID || !BITRIX_HOOK_SECRET) {
@@ -107,6 +92,12 @@ export default function BitrixDashboard() {
     // Note: totalCount is preserved to keep the progress bar context
 
     try {
+      if (!customStartDate || !customEndDate) {
+        setError("Please select both start and end dates");
+        setLoading(false);
+        return;
+      }
+
       let currentStart: number | null = 0;
       let accumulatedTotal = 0;
       const mergedData: AggregatedProduct[] = [];
@@ -117,20 +108,19 @@ export default function BitrixDashboard() {
         const result = await fetchBitrixData(
           BITRIX_USER_ID,
           BITRIX_HOOK_SECRET,
-          selectedMonth,
-          selectedYear,
+          customStartDate,
+          customEndDate,
           selectedLocation,
           currentStart,
           currentLimit,
           "ufCrm_634952003E51B",
-          selectedDay,
           selectedInvoiceType,
           selectedCreatedAt
         );
 
         // Merge products
         result.products.forEach((newProd) => {
-          const existing = mergedData.find((p) => p.name === newProd.name);
+          const existing = mergedData.find((p) => p.name === newProd.name && p.paymentMode === newProd.paymentMode);
           if (existing) {
             existing.deals += newProd.deals;
             existing.quantitySold += newProd.quantitySold;
@@ -172,6 +162,7 @@ export default function BitrixDashboard() {
       data.map((item) => ({
         "Product Name": item.name,
         Location: item.locationId,
+        "Payment Mode": item.paymentMode,
         Deals: item.deals,
         "Quantity Sold": item.quantitySold,
         "Net Price": item.netPrice,
@@ -183,8 +174,8 @@ export default function BitrixDashboard() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
 
-    // Generate filename with month and year
-    const fileName = `Inventory_${months[selectedMonth]}_${selectedYear}.xlsx`;
+    // Generate filename with dates
+    const fileName = `Inventory_${customStartDate}_to_${customEndDate}.xlsx`;
     XLSX.writeFile(workbook, fileName);
   };
 
@@ -227,67 +218,28 @@ export default function BitrixDashboard() {
 
         {/* Config Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-[#E2E8F0] p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-9 gap-4 items-end">
-            <div className="lg:col-span-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
+            <div>
               <label className="block text-sm font-medium text-[#475569] mb-2">
-                Search Product
+                Start Date
               </label>
               <input
-                type="text"
-                placeholder="Filter by name..."
-                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                type="date"
+                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] outline-none transition-all text-black"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#475569] mb-2">
-                Month
+                End Date
               </label>
-              <select
-                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-              >
-                {months.map((m, i) => (
-                  <option key={m} value={i}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#475569] mb-2">
-                Day
-              </label>
-              <select
-                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
-                value={selectedDay}
-                onChange={(e) => setSelectedDay(e.target.value === "All" ? "All" : parseInt(e.target.value))}
-              >
-                <option value="All">All Days</option>
-                {Array.from({ length: new Date(selectedYear, selectedMonth + 1, 0).getDate() }, (_, i) => (
-                  <option key={i + 1} value={i + 1}>
-                    {i + 1}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#475569] mb-2">
-                Year
-              </label>
-              <select
-                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              >
-                {years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="date"
+                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] outline-none transition-all text-black"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#475569] mb-2">
@@ -339,6 +291,18 @@ export default function BitrixDashboard() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#475569] mb-2">
+                Search Product
+              </label>
+              <input
+                type="text"
+                placeholder="Filter by name..."
+                className="w-full px-4 py-2 rounded-xl border border-[#CBD5E1] focus:ring-2 focus:ring-[#3B82F6] focus:border-transparent outline-none transition-all text-black"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
             <div>
               <label className="text-sm font-medium text-[#475569] mb-2 flex justify-between items-center">
@@ -506,7 +470,7 @@ export default function BitrixDashboard() {
             </div>
             <span className="text-sm font-medium text-[#64748B] flex items-center gap-2">
               <span>
-                {months[selectedMonth]} {selectedYear}
+                {customStartDate} to {customEndDate}
               </span>
               {totalInvoices > 0 && (
                 <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-md text-xs font-bold">
@@ -521,6 +485,9 @@ export default function BitrixDashboard() {
                 <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
                   <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">
                     Product & Location
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-center">
+                    Pay Mode
                   </th>
                   <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider text-center">
                     Deals
@@ -554,6 +521,11 @@ export default function BitrixDashboard() {
                             </svg>
                             {item.locationId}
                           </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="px-2.5 py-0.5 rounded-full text-sm font-medium bg-[#F1F5F9] text-[#475569]">
+                            {item.paymentMode || "Unknown"}
+                          </span>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <span className="px-2.5 py-0.5 rounded-full text-sm font-medium bg-[#F1F5F9] text-[#475569]">

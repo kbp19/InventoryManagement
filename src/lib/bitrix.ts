@@ -16,6 +16,7 @@ export interface ProductRow {
 export interface AggregatedProduct {
   name: string;
   locationId: string;
+  paymentMode: string;
   deals: number;
   quantitySold: number;
   netRevenue: number;
@@ -141,22 +142,16 @@ export async function fetchListElements(userId: string, hook: string, iblockId: 
 export async function fetchBitrixData(
   userId: string,
   hook: string,
-  month: number,
-  year: number,
+  startDate: string,
+  endDate: string,
   filterLocationId?: string,
   start: number = 0,
   limit: number = 50,
   manualFieldId?: string,
-  day?: number | "All",
   invoiceType?: string,
   createdAt?: string,
 ) {
   const baseUrl = `https://crm.mantracare.com/rest/${userId}/${hook}`;
-  const startDay = day && day !== "All" ? day : 1;
-  const endDay = day && day !== "All" ? day : new Date(year, month + 1, 0).getDate();
-  
-  const startDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
-  const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
 
   try {
     const fieldsRes = await fetch(
@@ -165,6 +160,10 @@ export async function fetchBitrixData(
     const fieldsData = await fieldsRes.json();
     const locationMap: Record<string, string> = {};
     let actualLocationField = manualFieldId || "locationId";
+
+    const paymentModeMapEnum1: Record<string, string> = {};
+    const paymentModeMapEnum2: Record<string, string> = {};
+    const paymentModeMapIblock: Record<string, string> = {};
 
     if (fieldsData.result && fieldsData.result.fields) {
       const allFields = fieldsData.result.fields;
@@ -179,12 +178,31 @@ export async function fetchBitrixData(
         });
       }
 
+      if (allFields["ufCrm_619DF828AB6E7"]) {
+        const items = allFields["ufCrm_619DF828AB6E7"].items || [];
+        items.forEach((item: any) => { paymentModeMapEnum1[item.ID] = item.VALUE; });
+      }
+      if (allFields["ufCrm_682EB9C9607BE"]) {
+        const items = allFields["ufCrm_682EB9C9607BE"].items || [];
+        items.forEach((item: any) => { paymentModeMapEnum2[item.ID] = item.VALUE; });
+      }
+
       if (actualLocationField === "ufCrm_634952003E51B") {
         const hospitalLocs = await fetchHospitalLocations(userId, hook);
         hospitalLocs.forEach((loc: any) => {
           locationMap[loc.ID] = loc.NAME;
         });
       }
+    }
+
+    // Fetch Payment Modes Iblock
+    try {
+      const paymentModesList = await fetchListElements(userId, hook, 110);
+      paymentModesList.forEach((loc: any) => {
+        paymentModeMapIblock[loc.ID] = loc.NAME;
+      });
+    } catch (e) {
+      console.error("Error fetching payment modes iblock", e);
     }
 
     const filter: any = {
@@ -216,7 +234,7 @@ export async function fetchBitrixData(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           entityTypeId: 31,
-          select: ["id", "title", "begindate", actualLocationField],
+          select: ["id", "title", "begindate", actualLocationField, "ufCrm_619DF828AB6E7", "ufCrm_682EB9C9607BE", "ufCrm_682EB9C9759AE"],
           filter,
           order: { begindate: "DESC" },
           start,
@@ -236,6 +254,9 @@ export async function fetchBitrixData(
         params.append("select[1]", "title");
         params.append("select[2]", "begindate");
         params.append("select[3]", actualLocationField);
+        params.append("select[4]", "ufCrm_619DF828AB6E7");
+        params.append("select[5]", "ufCrm_682EB9C9607BE");
+        params.append("select[6]", "ufCrm_682EB9C9759AE");
         Object.keys(filter).forEach((k) =>
           params.append(`filter[${k}]`, filter[k]),
         );
@@ -329,16 +350,30 @@ export async function fetchBitrixData(
             locationName = locationMap[rawLocId] || `Area: ${rawLocId}`;
           }
 
+          let payMode = "Unknown";
+          const pm1 = invoice?.["ufCrm_682EB9C9759AE"];
+          const pm2 = invoice?.["ufCrm_619DF828AB6E7"];
+          const pm3 = invoice?.["ufCrm_682EB9C9607BE"];
+
+          if (pm1 && paymentModeMapIblock[pm1]) {
+            payMode = paymentModeMapIblock[pm1];
+          } else if (pm2 && paymentModeMapEnum1[pm2]) {
+            payMode = paymentModeMapEnum1[pm2];
+          } else if (pm3 && paymentModeMapEnum2[pm3]) {
+            payMode = paymentModeMapEnum2[pm3];
+          }
+
           const productRows = batchData.result.result[key]?.productRows;
           if (productRows) {
             const seenInThisInv = new Set<string>();
             productRows.forEach((row: any) => {
               const name = row.productName;
-              const aggKey = `${locationName}_${name}`;
+              const aggKey = `${locationName}_${name}_${payMode}`;
               if (!productAggregation[aggKey]) {
                 productAggregation[aggKey] = {
                   name,
                   locationId: locationName,
+                  paymentMode: payMode,
                   deals: 0,
                   quantitySold: 0,
                   netRevenue: 0,
@@ -390,20 +425,14 @@ export async function fetchBitrixData(
 export async function fetchTotalCount(
   userId: string,
   hook: string,
-  month: number,
-  year: number,
+  startDate: string,
+  endDate: string,
   filterLocationId?: string,
   manualFieldId?: string,
-  day?: number | "All",
   invoiceType?: string,
   createdAt?: string,
 ) {
   const baseUrl = `https://crm.mantracare.com/rest/${userId}/${hook}`;
-  const startDay = day && day !== "All" ? day : 1;
-  const endDay = day && day !== "All" ? day : new Date(year, month + 1, 0).getDate();
-
-  const startDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
-  const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
 
   const filter: any = {
     ">=begindate": startDate,
